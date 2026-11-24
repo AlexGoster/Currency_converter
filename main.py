@@ -4,6 +4,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import json
+import math
 import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,9 +20,16 @@ def load_rates():
     try:
         with open(RATES_FILE, "r", encoding="utf-8") as f:
             rates = json.load(f)
+            if not isinstance(rates, dict) or not rates or any(
+                not isinstance(currency, str) or not currency
+                or isinstance(rate, bool) or not isinstance(rate, (int, float))
+                or not math.isfinite(rate) or rate <= 0
+                for currency, rate in rates.items()
+            ):
+                raise ValueError("Курсы должны быть положительными конечными числами.")
             return rates
-    except json.JSONDecodeError:
-        messagebox.showerror("Ошибка", "Невалидный JSON в rates.json")
+    except (ValueError, OSError) as exc:
+        messagebox.showerror("Ошибка", f"Не удалось загрузить rates.json: {exc}")
         return {}
 
 
@@ -40,11 +48,11 @@ class ConverterApp:
         self.amount_entry.insert(0, "100")
 
         tk.Label(root, text="Из:").grid(row=1, column=0, sticky="w", padx=10)
-        self.from_var = tk.StringVar(value="USD")
+        self.from_var = tk.StringVar(master=root, value="USD" if "USD" in currencies else currencies[0])
         tk.OptionMenu(root, self.from_var, *currencies).grid(row=1, column=1, sticky="w", padx=10)
 
         tk.Label(root, text="В:").grid(row=2, column=0, sticky="w", padx=10, pady=(0, 10))
-        self.to_var = tk.StringVar(value="RUB")
+        self.to_var = tk.StringVar(master=root, value="RUB" if "RUB" in currencies else currencies[-1])
         tk.OptionMenu(root, self.to_var, *currencies).grid(row=2, column=1, sticky="w", padx=10, pady=(0, 10))
 
         tk.Button(root, text="Конвертировать", command=self.convert, width=20).grid(row=3, column=0, columnspan=2, pady=10)
@@ -60,6 +68,9 @@ class ConverterApp:
             return
 
         from_c = self.from_var.get()
+        if not math.isfinite(amount) or amount < 0:
+            messagebox.showerror("Ошибка", "Сумма должна быть неотрицательным конечным числом.")
+            return
         to_c = self.to_var.get()
 
         if from_c not in self.rates or to_c not in self.rates:
@@ -71,6 +82,9 @@ class ConverterApp:
             return
 
         result = amount / self.rates[from_c] * self.rates[to_c]
+        if not math.isfinite(result):
+            messagebox.showerror("Ошибка", "Сумма слишком велика.")
+            return
         self.result_label.config(text=f"{amount:.2f} {from_c} = {result:.2f} {to_c}")
 
 
